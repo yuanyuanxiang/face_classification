@@ -112,7 +112,9 @@ def compile_gradient_function(input_model, category_index, layer_name):
 
     loss = K.sum(model.layers[-1].output)
     conv_output = model.layers[0].get_layer(layer_name).output
-    gradients = normalize(K.gradients(loss, conv_output)[0])
+    x = K.gradients(loss, conv_output)[0]
+    print('x =', x)
+    gradients = normalize(x)
     gradient_function = K.function([model.layers[0].input, K.learning_phase()],
                                                     [conv_output, gradients])
     return gradient_function

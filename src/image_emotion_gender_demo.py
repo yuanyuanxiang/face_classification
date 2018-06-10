@@ -1,3 +1,8 @@
+"""
+对图像中的人脸进行检测，然后识别其性别、表情。
+用法：python image_emotion_gender_demo.py IMAGE_FILE
+"""
+
 import sys
 
 import cv2
@@ -77,6 +82,8 @@ for face_coordinates in faces:
     draw_bounding_box(face_coordinates, rgb_image, color)
     draw_text(face_coordinates, rgb_image, gender_text, color, 0, -20, 1, 2)
     draw_text(face_coordinates, rgb_image, emotion_text, color, 0, -50, 1, 2)
+    print(emotion_text, gender_text, 'pos =', face_coordinates)
 
 bgr_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
 cv2.imwrite('../images/predicted_test_image.png', bgr_image)
+print("Image is saved in '../images/predicted_test_image.png'")
