@@ -7,9 +7,17 @@
 
 import sys
 import cv2
+import time
 import numpy as np
 from PIL import Image
 from keras.models import load_model
+
+import socketserver
+
+# 人脸图像的宽度
+SIZE = 160
+max_len = SIZE*SIZE*3
+margin = 32
 
 def apply_offsets(face_coordinates, offsets):
     x, y, width, height = face_coordinates
@@ -34,7 +42,7 @@ gender_labels = {0:'woman', 1:'man'}
 # hyper-parameters for bounding boxes shape
 gender_offsets = (10, 10)
 emotion_offsets = (0, 0)
-face_coordinates = [24, 24, 112, 112]
+face_coordinates = [int(margin/2), int(margin/2), SIZE-margin, SIZE-margin]
 x1, x2, y1, y2 = apply_offsets(face_coordinates, gender_offsets)
 s1, s2, t1, t2 = apply_offsets(face_coordinates, emotion_offsets)
 
@@ -60,21 +68,26 @@ def test_src(image_src):
         rgb_face = cv2.resize(rgb_face, (gender_target_size))
         gray_face = cv2.resize(gray_face, (emotion_target_size))
     except:
-        return ''
+        return (0, '')
 
     rgb_face = preprocess_input(rgb_face, False)
     rgb_face = np.expand_dims(rgb_face, 0)
     gender_prediction = gender_classifier.predict(rgb_face)
     gender_label_arg = np.argmax(gender_prediction)
     gender_text = gender_labels[gender_label_arg]
+    gender_pre = gender_prediction[0, gender_label_arg]
 
     gray_face = preprocess_input(gray_face, True)
     gray_face = np.expand_dims(gray_face, 0)
     gray_face = np.expand_dims(gray_face, -1)
-    emotion_label_arg = np.argmax(emotion_classifier.predict(gray_face))
+    emotion_prediction = emotion_classifier.predict(gray_face)
+    emotion_label_arg = np.argmax(emotion_prediction)
     emotion_text = emotion_labels[emotion_label_arg]
+    emotion_pre = emotion_prediction[0, emotion_label_arg]
+
+    prediction = gender_pre * emotion_pre
     result = emotion_text + '_' + gender_text
-    return result
+    return (prediction, result)
 
 # 检测图像文件
 def test_image(image_file):
@@ -84,9 +97,59 @@ def test_image(image_file):
     except IOError:
         print('IOError: File is not accessible.')
         return
-    result = test_src(image)
-    print('Result =', result)
+    start_time = time.time()
+    prediction, name = test_src(image)
+    use_time = time.time() - start_time
+    print(time.strftime("%Y-%m-%d %H:%M:%S"), 'elapsed time:', use_time)
+    print('prediction =', prediction, 'name =', name)
+
+# 激活GPU
+test_image('image.jpg')
+
+# SOCKET SERVER
+class RequestHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        print (self.client_address[0], 'start detecting.')
+        recv_len = 0
+        recv_buf = b''
+        while True:
+            try:
+                data = self.request.recv(max_len - recv_len)
+                if (b'' == data):
+                    self.request.close()
+                    break
+                recv_len = recv_len + len(data)
+                recv_buf = recv_buf + data
+                if max_len == recv_len:
+                    start_time = time.time()
+                    image = Image.frombuffer('RGB', (SIZE, SIZE), recv_buf, 'raw', 'RGB', 0, 1)
+                    prediction, name = test_src(image)
+                    recv_len = 0
+                    recv_buf = b''
+                    use_time = time.time() - start_time
+                    print(time.strftime("%Y-%m-%d %H:%M:%S"), 'elapsed time:', use_time, 
+                        'prediction =', prediction, 'name =', name)
+                    self.request.sendall(bytes(name + ':' + str(prediction) + ';', 'utf8'))
+                elif max_len > recv_len:
+                    recv_len = 0
+                    recv_buf = b''
+            except KeyboardInterrupt:
+                print('Ctrl+C is pressed.')
+                break
+        print (self.client_address[0], 'stop detecting.')
 
 # MAIN
 if __name__ == '__main__':
-    test_image('image.jpg' if (1 == len(sys.argv)) else sys.argv[1])
+    if (1 == len(sys.argv)):
+        HOST, PORT = '127.0.0.1', 9999
+    elif (2 == len(sys.argv)):
+        HOST, PORT = sys.argv[1], 9999
+    elif (3 <= len(sys.argv)):
+        HOST, PORT = sys.argv[1], int(sys.argv[2])
+    server = socketserver.ThreadingTCPServer((HOST, PORT), RequestHandler)
+    print('Start server: host =', HOST, 'port =', PORT)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print('Ctrl+C is pressed.')
+        sys.exit(0)

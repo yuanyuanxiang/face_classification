@@ -1,0 +1,17 @@
+该程序基于MFC，对图片进行人脸识别。若缺少vc动态链接库，请先安装"vc_redist.x64.exe"。
+
+若在src目录启动TCP服务，则objDetector可作为其客户端，将人脸发送至Server进行识别。
+
+Step 1: 启动TCP服务
+
+	python emotion_gender_identify.py 127.0.0.1 9999
+
+Step 2: 连接TCP服务
+
+	在objDetector菜单->"设置"->"服务器"中填写127.0.0.1及9999
+
+Step 3: 打开文件进行人脸检测及识别
+
+袁沅祥(yuan_yuanxiang@163.com)
+
+2018年6月10日
